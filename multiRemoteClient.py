@@ -1,4 +1,4 @@
-# multi_remote_client.py
+# multiRemoteClient.py
 import configparser
 import socket
 import threading
@@ -38,7 +38,6 @@ class ForwardingServer:
                     self.clients.add(client)
 
                 print(f"[{self.name}] FORWARD viewer connected {addr}")
-                # No _cleaner thread that eats data anymore
             except socket.timeout:
                 continue
             except Exception:
@@ -49,7 +48,7 @@ class ForwardingServer:
             return
         dead = []
         with self.lock:
-            for c in self.clients.copy():  # copy to avoid mutation during iteration
+            for c in self.clients.copy():
                 try:
                     c.sendall(data)
                 except:
@@ -104,7 +103,7 @@ def load_config(file="connections.ini"):
     return conns
 
 def main():
-    print("Ironclad Binary Fleet + Forwarding v2.0 Final - FIXED\n")
+    print("Starting Forwarding v2.0 Final\n")
     connections = load_config()
     if not connections:
         return
@@ -128,7 +127,21 @@ def main():
         def update_last_seen(data: bytes):
             last_seen["time"] = time.time()
 
-        # FIXED: proper closure using default argument
+        # Fixed closure + guaranteed status output every 30s
+        def status_printer():
+            while True:
+                time.sleep(30)
+                now = time.time()
+                delta = int(now - last_seen["time"])
+                current_ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now))
+                last_ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(last_seen["time"]))
+                ago = "never" if delta > 10**9 else f"{delta}s ago"
+                status = "UP" if rc.connected else "DOWN"
+                recon = " (reconnecting)" if getattr(rc, "_reconnect_active", False) else ""
+                print(f"[{c['name']}] {current_ts} | STATUS: {status}{recon} | LAST DATA: {last_ts} ({ago})", flush=True)
+
+        threading.Thread(target=status_printer, daemon=True).start()
+
         rc.on_message = lambda data, server=fwd: (
             update_last_seen(data),
             server.broadcast(data)
@@ -142,7 +155,7 @@ def main():
         fleet.append((rc, fwd))
 
     try:
-        print("\nSystem running. Viewers: nc 127.0.0.1 8001  /  nc 127.0.0.1 8002\n")
+        print("\nSystem running. Viewers: nc 127.0.0.1 <forward_port>\n")
         while True:
             time.sleep(3600)
     except KeyboardInterrupt:
