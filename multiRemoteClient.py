@@ -103,12 +103,13 @@ def load_config(file="connections.ini"):
     return conns
 
 def main():
-    print("Starting Forwarding v2.0 Final\n")
+    print("Starting Forwarder v2\n")
     connections = load_config()
     if not connections:
         return
 
     fleet = []
+
     for c in connections:
         fwd = ForwardingServer(c["forward_port"], c["name"])
         fwd.start()
@@ -121,37 +122,46 @@ def main():
             auto_reconnect=True
         )
 
-        log = lambda tag, msg="": print(f"[{c['name']}] {tag} {msg}".strip())
+        class StreamHandler:
+            def __init__(self):
+                self.name = c["name"]
+                self.last_seen = time.time()
+                self.fwd = fwd
+                self.log = lambda tag, msg="": print(f"[{self.name}] {tag} {msg}".strip())
 
-        last_seen = {"time": time.time()}
-        def update_last_seen(data: bytes):
-            last_seen["time"] = time.time()
+            def update_last_seen_and_broadcast(self, data: bytes):
+                self.last_seen = time.time()
+                self.fwd.broadcast(data) 
 
-        # Fixed closure + guaranteed status output every 30s
-        def status_printer():
-            while True:
-                time.sleep(30)
-                now = time.time()
-                delta = int(now - last_seen["time"])
-                current_ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now))
-                last_ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(last_seen["time"]))
-                ago = "never" if delta > 10**9 else f"{delta}s ago"
-                status = "UP" if rc.connected else "DOWN"
-                recon = " (reconnecting)" if getattr(rc, "_reconnect_active", False) else ""
-                print(f"[{c['name']}] {current_ts} | STATUS: {status}{recon} | LAST DATA: {last_ts} ({ago})", flush=True)
+            def status_printer(self):
+                while True:
+                    time.sleep(30)
+                    now = time.time()
+                    delta = int(now - self.last_seen)
+                    current_ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now))
+                    last_ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.last_seen))
+                    ago = "never" if delta > 10**9 else f"{delta}s ago"
+                    status = "UP" if rc.connected else "DOWN"
+                    recon = " (reconnecting)" if getattr(rc, "_reconnect_active", False) else ""
+                    print(f"[{self.name}] {current_ts} | STATUS: {status}{recon} | LAST DATA: {last_ts} ({ago})", flush=True)
 
-        threading.Thread(target=status_printer, daemon=True).start()
+            def on_connect(self):
+                self.log("UP", f"{c['remote_host']}:{c['remote_port']}")
 
-        rc.on_message = lambda data, server=fwd: (
-            update_last_seen(data),
-            server.broadcast(data)
-        )
+            def on_disconnect(self, e):
+                self.log("DOWN", str(e))
 
-        rc.on_connect    = lambda: log("UP", f"{c['remote_host']}:{c['remote_port']}")
-        rc.on_disconnect = lambda e: log("DOWN", str(e))
+        handler = StreamHandler()
 
-        log("START", f"→ {c['remote_host']}:{c['remote_port']} | forward :{c['forward_port']}")
+        rc.on_message    = handler.update_last_seen_and_broadcast
+        rc.on_connect    = handler.on_connect
+        rc.on_disconnect = handler.on_disconnect
+
+        threading.Thread(target=handler.status_printer, daemon=True).start()
+
+        handler.log("START", f"→ {c['remote_host']}:{c['remote_port']} | forward :{c['forward_port']}")
         rc.connect()
+
         fleet.append((rc, fwd))
 
     try:
