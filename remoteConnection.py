@@ -1,4 +1,4 @@
-# RemoteConnection.py
+# remoteConnection.py
 import socket
 import threading
 import time
@@ -68,15 +68,10 @@ class RemoteConnection:
                 self._receive_thread.start()
 
                 if self.on_connect:
-                    try: self.on_connect()
-                    except Exception as e: print(f"[!] on_connect error → {target}: {e}")
+                    self.on_connect()
 
                 return True
 
-            except ConnectionRefusedError:
-                print(f"[-] REFUSED → {target}")
-            except socket.timeout:
-                print(f"[-] TIMEOUT → {target}")
             except Exception as e:
                 print(f"[-] Connect failed → {target}: {e}")
 
@@ -98,8 +93,7 @@ class RemoteConnection:
                     raise ConnectionError("Remote closed")
                 self._last_receive_time = time.time()
                 if self.on_message:
-                    try: self.on_message(data)
-                    except Exception as e: print(f"[!] on_message error: {e}")
+                    self.on_message(data)
             except socket.timeout:
                 continue
             except Exception:
@@ -114,16 +108,17 @@ class RemoteConnection:
             self.connected = False
             self.running = False
             if self.socket:
-                try: self.socket.close()
-                except: pass
+                try:
+                    self.socket.close()
+                except:
+                    pass
                 self.socket = None
 
             reason = str(exc) if exc else "Unknown"
             print(f"[-] Disconnected ← {self.host}:{self.port} | {reason}")
 
             if self.on_disconnect:
-                try: self.on_disconnect(exc or ConnectionError(reason))
-                except Exception as e: print(f"[!] on_disconnect error: {e}")
+                self.on_disconnect(exc or ConnectionError(reason))
 
             if self.auto_reconnect and not self._reconnect_active:
                 self._reconnect_active = True
@@ -143,23 +138,34 @@ class RemoteConnection:
         with self._lock:
             self._reconnect_active = False
 
+    def disconnect(self, force_no_reconnect=False):
+        if force_no_reconnect:
+            self.auto_reconnect = False
+        self.running = False
+        with self._lock:
+            if self.socket:
+                try:
+                    self.socket.shutdown(socket.SHUT_RDWR)
+                except:
+                    pass
+                try:
+                    self.socket.close()
+                except:
+                    pass
+                self.socket = None
+            self.connected = False
+
+    def force_disconnect_and_reconnect(self):
+        """Force immediate disconnect + reconnect while keeping auto_reconnect enabled"""
+        self._handle_disconnect(ConnectionError("Stale data — forced reconnect"))
+
     def send(self, data: bytes) -> bool:
         with self._lock:
-            if not self.connected or not self.socket: return False
+            if not self.connected or not self.socket:
+                return False
             try:
                 self.socket.sendall(data)
                 return True
             except Exception as e:
                 self._handle_disconnect(e)
                 return False
-
-    def disconnect(self):
-        self.auto_reconnect = False
-        self.running = False
-        with self._lock:
-            if self.socket:
-                try: self.socket.shutdown(socket.SHUT_RDWR)
-                except: pass
-                self.socket.close()
-                self.socket = None
-            self.connected = False

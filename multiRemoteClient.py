@@ -33,10 +33,8 @@ class ForwardingServer:
                 client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 client.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
                 client.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 30)
-
                 with self.lock:
                     self.clients.add(client)
-
                 print(f"[{self.name}] FORWARD viewer connected {addr}")
             except socket.timeout:
                 continue
@@ -103,7 +101,7 @@ def load_config(file="connections.ini"):
     return conns
 
 def main():
-    print("Starting Forwarder v2\n")
+    print("Starting Forwarder \n")
     connections = load_config()
     if not connections:
         return
@@ -123,15 +121,33 @@ def main():
         )
 
         class StreamHandler:
-            def __init__(self):
-                self.name = c["name"]
+            def __init__(self, remote_conn, forwarder, host, port, name):
+                self.rc = remote_conn
+                self.fwd = forwarder
+                self.host = host
+                self.port = port
+                self.name = name
                 self.last_seen = time.time()
-                self.fwd = fwd
                 self.log = lambda tag, msg="": print(f"[{self.name}] {tag} {msg}".strip())
+
+                self.stale_threshold = 6 * 3600
+                self.stale_watchdog_running = False
+                self.start_stale_watchdog()
+
+            def start_stale_watchdog(self):
+                self.stale_watchdog_running = True
+                def watchdog():
+                    while self.stale_watchdog_running:
+                        time.sleep(60)
+                        if self.rc.connected and (time.time() - self.last_seen > self.stale_threshold):
+                            self.log("STALE", f"No data for {int((time.time()-self.last_seen)/60)}min → forcing reconnect")
+                            self.rc.force_disconnect_and_reconnect()
+                            return
+                threading.Thread(target=watchdog, daemon=True).start()
 
             def update_last_seen_and_broadcast(self, data: bytes):
                 self.last_seen = time.time()
-                self.fwd.broadcast(data) 
+                self.fwd.broadcast(data)
 
             def status_printer(self):
                 while True:
@@ -141,17 +157,19 @@ def main():
                     current_ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now))
                     last_ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.last_seen))
                     ago = "never" if delta > 10**9 else f"{delta}s ago"
-                    status = "UP" if rc.connected else "DOWN"
-                    recon = " (reconnecting)" if getattr(rc, "_reconnect_active", False) else ""
+                    status = "UP" if self.rc.connected else "DOWN"
+                    recon = " (reconnecting)" if getattr(self.rc, "_reconnect_active", False) else ""
                     print(f"[{self.name}] {current_ts} | STATUS: {status}{recon} | LAST DATA: {last_ts} ({ago})", flush=True)
 
             def on_connect(self):
-                self.log("UP", f"{c['remote_host']}:{c['remote_port']}")
+                self.log("UP", f"{self.host}:{self.port}")
+                self.start_stale_watchdog()
 
             def on_disconnect(self, e):
                 self.log("DOWN", str(e))
+                self.stale_watchdog_running = False
 
-        handler = StreamHandler()
+        handler = StreamHandler(rc, fwd, c["remote_host"], c["remote_port"], c["name"])
 
         rc.on_message    = handler.update_last_seen_and_broadcast
         rc.on_connect    = handler.on_connect
@@ -170,9 +188,8 @@ def main():
             time.sleep(3600)
     except KeyboardInterrupt:
         print("\nShutting down...")
-        for rc, fwd in fleet:
-            rc.disconnect()
-            fwd.stop()
+        for rc, _ in fleet:
+            rc.disconnect(force_no_reconnect=True)
         print("Clean exit.")
 
 if __name__ == "__main__":
