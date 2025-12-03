@@ -1,4 +1,4 @@
-# Multi-Forwarder v2.0 Final
+# Multi-Forwarder
 
 A lightweight, rock-solid, multi-stream TCP forwarding daemon written in pure Python.  
 Designed for reliable, low-latency forwarding of binary or text protocols from multiple remote sources to local viewer ports — with zero cross-talk.
@@ -67,22 +67,39 @@ The forwarder prints live status every 30 seconds:
 [DATA_TYPE1] 2025-04-05 12:34:56 | LAST DATA: 2025-04-05 12:34:54 (2s ago)
 
 
-# Dev log (pre git commit)
-- Fixed silent data-eating in _cleaner() — viewer sockets were draining all incoming bytes and breaking TCP flow control.
-- Fixed late-binding closure bug — both streams were using the last ForwardingServer instance (classic Python loop/lambda trap).
-- Eliminated cross-talk — data from 5000 no longer leaks to 8002 and vice versa.
-- Restored independent streams — each forward_port now receives only its own remote_port data.
-- Removed unnecessary recv thread — viewers are now write-only (correct for unidirectional feeds).
-- Proper per-stream broadcasting — multiple nc viewers on the same port work perfectly.
-- Fixed viewer disconnect cleanup — dead clients no longer leak or block sends.
-- Stable multi-section INI support — 1 or 50 connections work with zero interference.
+# History
+### Revision 5 (December 02, 2025) – "The Immortal One"
 
+Added force_disconnect_and_reconnect() in remoteConnection.py
+Watchdog now properly triggers full disconnect path → on_disconnect fires → reconnect actually works
+Fixed wrong host/port in "UP" log message (now uses per-instance values)
+Stale feeds now die and resurrect perfectly without blocking forever on recv()
 
-# Known Fixed Issues (v2.0 Final)
+### Revision 4 (November 30, 2025) – "No More Cross-Kills"
 
-Cross-talk between streams → eliminated (closure bug fixed)
-Viewer connections silently eating data → removed (recv-drain thread deleted)
-Only last stream receiving data → resolved with proper lambda default argument
+Made StreamHandler take explicit rc and fwd references (eliminated last closure bug)
+Watchdog now only kills its own connection — no more murdering all streams when one goes stale
+Fixed disconnect() to preserve auto_reconnect=True unless explicitly told otherwise
+
+### Revision 3 (November 28, 2025) – "The Class Revolution"
+
+Switched from closure hell to per-connection StreamHandler class
+Eliminated all late-binding bugs forever
+Correct per-stream names, last-seen times, and status printing
+Added stale-data watchdog (6-hour no-data → force reconnect)
+
+### Revision 2 (November 25, 2025) – "Broadcast Restored"
+
+Re-added missing fwd.broadcast(data) call (viewers were getting no data)
+Fixed self_lock → self.lock typo
+Per-connection status printer now prints correct name and real delta (not +30s)
+
+### Revision 1 (November 22, 2025) – "The Great Closure Massacre"
+
+Removed data-eating _cleaner thread
+Fixed late-binding closure that made all streams use the last ForwardingServer
+Eliminated cross-talk between streams
+Multiple viewers per port now work perfectly
 
 Requirements
 
