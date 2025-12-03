@@ -70,35 +70,35 @@ The forwarder prints live status every 30 seconds:
 # History
 ### Revision 5 (December 02, 2025) – "The Immortal One"
 
-Added force_disconnect_and_reconnect() in remoteConnection.py
-Watchdog now properly triggers full disconnect path → on_disconnect fires → reconnect actually works
-Fixed wrong host/port in "UP" log message (now uses per-instance values)
+Added force_disconnect_and_reconnect() in remoteConnection.py\
+Watchdog now properly triggers full disconnect path → on_disconnect fires → reconnect actually works\
+Fixed wrong host/port in "UP" log message (now uses per-instance values)\
 Stale feeds now die and resurrect perfectly without blocking forever on recv()
 
 ### Revision 4 (November 30, 2025) – "No More Cross-Kills"
 
-Made StreamHandler take explicit rc and fwd references (eliminated last closure bug)
-Watchdog now only kills its own connection — no more murdering all streams when one goes stale
+Made StreamHandler take explicit rc and fwd references (eliminated last closure bug)\
+Watchdog now only kills its own connection — no more murdering all streams when one goes stale\
 Fixed disconnect() to preserve auto_reconnect=True unless explicitly told otherwise
 
 ### Revision 3 (November 28, 2025) – "The Class Revolution"
 
-Switched from closure hell to per-connection StreamHandler class
-Eliminated all late-binding bugs forever
-Correct per-stream names, last-seen times, and status printing
+Switched from closure hell to per-connection StreamHandler class\
+Eliminated all late-binding bugs forever\
+Correct per-stream names, last-seen times, and status printing\
 Added stale-data watchdog (6-hour no-data → force reconnect)
 
 ### Revision 2 (November 25, 2025) – "Broadcast Restored"
 
-Re-added missing fwd.broadcast(data) call (viewers were getting no data)
-Fixed self_lock → self.lock typo
+Re-added missing fwd.broadcast(data) call (viewers were getting no data)\
+Fixed self_lock → self.lock typo\
 Per-connection status printer now prints correct name and real delta (not +30s)
 
 ### Revision 1 (November 22, 2025) – "The Great Closure Massacre"
 
-Removed data-eating _cleaner thread
-Fixed late-binding closure that made all streams use the last ForwardingServer
-Eliminated cross-talk between streams
+Removed data-eating _cleaner thread\
+Fixed late-binding closure that made all streams use the last ForwardingServer\
+Eliminated cross-talk between streams\
 Multiple viewers per port now work perfectly
 
 Requirements
