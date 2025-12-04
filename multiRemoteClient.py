@@ -188,8 +188,9 @@ def main():
             time.sleep(3600)
     except KeyboardInterrupt:
         print("\nShutting down...")
-        for rc, _ in fleet:
+        for rc, fwd in fleet:
             rc.disconnect(force_no_reconnect=True)
+            fwd.stop()
         print("Clean exit.")
 
 if __name__ == "__main__":
